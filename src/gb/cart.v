@@ -2,6 +2,7 @@ module cart_top (
 	input         reset,
 
 	input         clk_sys,
+	input					clk_cart,
 	input         ce_cpu,
 	input         ce_cpu2x,
 	input         speed,
@@ -24,7 +25,6 @@ module cart_top (
 	output        cart_ready,
 
 	output        cram_rd,
-	output        cram_wr,
 
 	input         cart_download,
 
@@ -70,7 +70,13 @@ module cart_top (
 	input         Savestate_CRAMRWrEn,
 	input   [7:0] Savestate_CRAMWriteData,
 	output  [7:0] Savestate_CRAMReadData,
-	output        rumbling
+	output        rumbling,
+
+	inout   [7:4] cart_tran_bank0,
+	inout   [7:0] cart_tran_bank1,
+  output        cart_tran_bank1_dir,
+	inout   [7:0] cart_tran_bank2,
+	inout   [7:0] cart_tran_bank3
 );
 ///////////////////////////////////////////////////
 
@@ -96,16 +102,13 @@ eReg_SavestateV #(0, 37, 63, 0, 64'h0000000000000000) iREG_SAVESTATE_Ext2 (clk_s
 
 assign SaveStateExt_Dout = SaveStateBus_Dout_or[0] | SaveStateBus_Dout_or[1];
 
-wire [7:0] rom_do;
 wire [7:0] cram_do;
-wire [16:0] mbc_cram_addr;
-wire mbc_ram_enable, mbc_battery;
-wire mbc_cram_wr;
-wire [7:0] mbc_cram_wr_do;
+wire mbc_battery;
 
 mappers mappers (
 	.reset ( reset ),
 	.clk_sys   ( clk_sys ),
+	.clk_cart  ( clk_cart ),
 	.ce_cpu    ( ce_cpu ),
 	.ce_cpu2x  ( ce_cpu2x ),
 	.speed ( speed ),
@@ -166,24 +169,21 @@ mappers mappers (
 	.cart_di   ( cart_di ),
 	.cart_oe   ( cart_oe ),
 
-	.rom_di    ( rom_di  ),
-	.rom_do    ( rom_do  ),
-
 	.nCS       ( nCS     ),
 
-	.cram_rd   ( cram_rd  ),
-	.cram_di   ( cram_q  ),
+	// .cram_rd   ( cram_rd  ),
 	.cram_do   ( cram_do  ),
-	.cram_addr ( mbc_cram_addr ),
-
-	.cram_wr_do ( mbc_cram_wr_do ),
-	.cram_wr    ( mbc_cram_wr ),
 
 	.mbc_addr    ( mbc_addr ),
-	.ram_enabled ( mbc_ram_enable ),
+	// .ram_enabled ( mbc_ram_enable ),
 	.has_battery ( mbc_battery ),
-	.rumbling    ( cart_rumbling )
+	.rumbling    ( cart_rumbling ),
 
+	.cart_tran_bank0        ( cart_tran_bank0 ),
+  .cart_tran_bank1        ( cart_tran_bank1 ),
+  .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
+  .cart_tran_bank2        ( cart_tran_bank2 ),
+  .cart_tran_bank3        ( cart_tran_bank3 )
 );
 
 // extract header fields extracted from cartridge
@@ -386,29 +386,29 @@ always @* begin
 	else if (cram_rd)
 		cart_do_r = cram_do;
 	else
-		cart_do_r = rom_do;
+		cart_do_r = rom_di;
 end
 
 assign cart_do = cart_do_r;
 
-reg read_low = 0;
-always @(posedge clk_sys) begin
-	read_low <= cram_addr[0];
-end
+// reg read_low = 0;
+// always @(posedge clk_sys) begin
+// 	read_low <= cram_addr[0];
+// end
 
-assign Savestate_CRAMReadData = read_low ? cram_q_h : cram_q_l;
+// assign Savestate_CRAMReadData = read_low ? cram_q_h : cram_q_l;
 
-wire [7:0] cram_q = cram_addr[0] ? cram_q_h : cram_q_l;
-wire [7:0] cram_q_h;
-wire [7:0] cram_q_l;
+// wire [7:0] cram_q = cram_addr[0] ? cram_q_h : cram_q_l;
+// wire [7:0] cram_q_h;
+// wire [7:0] cram_q_l;
 
 wire is_cram_addr = ~nCS & ~cart_addr[14];
 
 assign cram_rd = cart_rd & is_cram_addr;
-assign cram_wr = sleep_savestate ? Savestate_CRAMRWrEn : mbc_cram_wr || (cart_wr & is_cram_addr & mbc_ram_enable);
+// assign cram_wr = cart_wr & is_cram_addr & mbc_ram_enable;
 
-wire [16:0] cram_addr = sleep_savestate ? Savestate_CRAMAddr[16:0] : mbc_cram_addr;
-wire [7:0] cram_di = sleep_savestate ? Savestate_CRAMWriteData : mbc_cram_wr ? mbc_cram_wr_do : cart_di;
+// wire [16:0] cram_addr = sleep_savestate ? Savestate_CRAMAddr[16:0] : mbc_cram_addr;
+// wire [7:0] cram_di = sleep_savestate ? Savestate_CRAMWriteData : mbc_cram_wr ? mbc_cram_wr_do : cart_di;
 
 // RAM size
 assign ram_mask_file =              // 0 - no ram
@@ -422,32 +422,32 @@ assign ram_mask_file =              // 0 - no ram
 assign has_save = mbc_battery && (cart_ram_size > 0 || mbc2 || mbc7 || tama);
 
 // Up to 8kb * 16banks of Cart Ram (128kb)
-dpram #(16) cram_l (
-	.clock_a (clk_sys),
-	.address_a (cram_addr[16:1]),
-	.wren_a (cram_wr & ~cram_addr[0]),
-	.data_a (cram_di),
-	.q_a (cram_q_l),
+// dpram #(16) cram_l (
+// 	.clock_a (clk_sys),
+// 	.address_a (cram_addr[16:1]),
+// 	.wren_a (cram_wr & ~cram_addr[0]),
+// 	.data_a (cram_di),
+// 	.q_a (cram_q_l),
 
-	.clock_b (clk_sys),
-	.address_b (bk_addr[15:0]),
-	.wren_b (bk_wr),
-	.data_b (bk_data[7:0]),
-	.q_b (bk_q[7:0])
-);
+// 	.clock_b (clk_sys),
+// 	.address_b (bk_addr[15:0]),
+// 	.wren_b (bk_wr),
+// 	.data_b (bk_data[7:0]),
+// 	.q_b (bk_q[7:0])
+// );
 
-dpram #(16) cram_h (
-	.clock_a (clk_sys),
-	.address_a (cram_addr[16:1]),
-	.wren_a (cram_wr & cram_addr[0]),
-	.data_a (cram_di),
-	.q_a (cram_q_h),
+// dpram #(16) cram_h (
+// 	.clock_a (clk_sys),
+// 	.address_a (cram_addr[16:1]),
+// 	.wren_a (cram_wr & cram_addr[0]),
+// 	.data_a (cram_di),
+// 	.q_a (cram_q_h),
 
-	.clock_b (clk_sys),
-	.address_b (bk_addr[15:0]),
-	.wren_b (bk_wr),
-	.data_b (bk_data[15:8]),
-	.q_b (bk_q[15:8])
-);
+// 	.clock_b (clk_sys),
+// 	.address_b (bk_addr[15:0]),
+// 	.wren_b (bk_wr),
+// 	.data_b (bk_data[15:8]),
+// 	.q_b (bk_q[15:8])
+// );
 
 endmodule

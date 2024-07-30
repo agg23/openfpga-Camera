@@ -1,6 +1,6 @@
 `default_nettype none
 
-`define isgbc 0
+`define isgbc 1
 
 module core_top (
 
@@ -231,17 +231,17 @@ assign bridge_endian_little = 0;
 // directions are 0:IN, 1:OUT
 assign cart_tran_bank3[7:2]    = 6'hzz;
 assign cart_tran_bank3[0]      = 1'hz;
-assign cart_tran_bank3_dir     = 1'b1; // Set to output for rumble cart
 assign cart_tran_bank2         = 8'hzz;
-assign cart_tran_bank2_dir     = 1'b0;
 assign cart_tran_bank1         = 8'hzz;
-assign cart_tran_bank1_dir     = 1'b0;
-assign cart_tran_bank0[7]      = 1'hz;
-assign cart_tran_bank0[5:4]    = 2'hz;
-assign cart_tran_bank0_dir     = 1'b1; // Set to output for rumble cart
-assign cart_tran_pin30         = 1'b0; // reset or cs2, we let the hw control it by itself
-assign cart_tran_pin30_dir     = 1'bz;
-assign cart_pin30_pwroff_reset = 1'b0;  // hardware can control this
+
+assign cart_tran_bank0_dir     = 1'b1; // Output control flags
+assign cart_tran_bank2_dir     = 1'b1; // Output addresses
+assign cart_tran_bank3_dir     = 1'b1; // Output addresses
+
+assign cart_tran_pin30         = 1'b1; // Set ~reset high
+assign cart_tran_pin30_dir     = 1'b1;
+assign cart_pin30_pwroff_reset = 1'b1;  // Enable GBC cart access
+
 assign cart_tran_pin31         = 1'bz;      // input
 assign cart_tran_pin31_dir     = 1'b0;  // input
 
@@ -510,7 +510,7 @@ always_ff @(posedge clk_74a) begin
   end
 end
 
-logic clk_sys, clk_ram, clk_ram_90, clk_vid, clk_vid_90;
+logic clk_sys, clk_ram, clk_ram_90, clk_vid, clk_vid_90, clk_cart6x;
 logic pll_core_locked, pll_core_locked_s, reset_n_s, external_reset_s;
 logic [31:0] cont1_key_s, cont2_key_s, cont3_key_s, cont4_key_s;
 logic [31:0] boot_settings_s, run_settings_s;
@@ -554,6 +554,25 @@ mf_pllbase mp1
   
   .locked   ( pll_core_locked )
 );
+
+cart_pll cart_pll (
+  .refclk   ( clk_74a         ),
+  .rst      ( 0               ),
+
+  .outclk_0 ( clk_cart6x        )
+);
+
+reg [2:0] clk_cart_divider = 0;
+
+wire clk_cart = clk_cart_divider < 3;
+
+always @(posedge clk_cart6x) begin
+  clk_cart_divider <= clk_cart_divider + 3'h1;
+
+  if (clk_cart_divider == 5) begin
+    clk_cart_divider <= 0;
+  end
+end
 
 data_loader #(
   .ADDRESS_MASK_UPPER_4   ( 4'h1  ),
@@ -698,7 +717,7 @@ sdram sdram (
 
 wire dn_write;
 wire cart_ready;
-wire cram_rd, cram_wr;
+wire cram_rd;
 wire [7:0] rom_do = (mbc_addr[0]) ? sdram_do[15:8] : sdram_do[7:0];
 wire [7:0] ram_mask_file, cart_ram_size;
 wire isGBC_game, isSGB_game;
@@ -708,15 +727,15 @@ wire [47:0] RTC_savedtimeOut;
 wire rumbling;
 wire RTC_inuse;
 
-rumbler rumbler_module
-(
-  .clk          ( clk_sys             ),
-  .reset        ( reset               ),
-  .rumble_en    ( rumble_en           ),
-  .rumbling     ( rumbling            ),
-  .cart_wr      ( cart_tran_bank0[6]  ),
-  .cart_rumble  ( cart_tran_bank3[1]  )
-);
+// rumbler rumbler_module
+// (
+//   .clk          ( clk_sys             ),
+//   .reset        ( reset               ),
+//   .rumble_en    ( rumble_en           ),
+//   .rumbling     ( rumbling            ),
+//   .cart_wr      ( cart_tran_bank0[6]  ),
+//   .cart_rumble  ( cart_tran_bank3[1]  )
+// );
 
 reg ce_32k; // 32768Hz clock for RTC
 reg [9:0] ce_32k_div;
@@ -744,6 +763,7 @@ cart_top cart
   .reset                      ( reset             ),
 
   .clk_sys                    ( clk_sys           ),
+  .clk_cart                   ( clk_cart          ),
   .ce_cpu                     ( ce_cpu            ),
   .ce_cpu2x                   ( ce_cpu2x          ),
   .speed                      ( speed             ),
@@ -766,7 +786,6 @@ cart_top cart
   .cart_ready                 ( cart_ready        ),
 
   .cram_rd                    ( cram_rd           ),
-  .cram_wr                    ( cram_wr           ),
 
   .cart_download              ( cart_download     ),
 
@@ -812,8 +831,14 @@ cart_top cart
   .Savestate_CRAMRWrEn        ( 0                 ),
   .Savestate_CRAMWriteData    ( 0                 ),
   .Savestate_CRAMReadData     (                   ),
-  
-  .rumbling                   ( rumbling          )
+
+  .rumbling                   ( rumbling          ),
+
+  .cart_tran_bank0        ( cart_tran_bank0 ),
+  .cart_tran_bank1        ( cart_tran_bank1 ),
+  .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
+  .cart_tran_bank2        ( cart_tran_bank2 ),
+  .cart_tran_bank3        ( cart_tran_bank3 )
 );
 
 reg [127:0] palette = 128'h828214517356305A5F1A3B4900000000;
@@ -883,7 +908,7 @@ gb gb
   .nCS                    ( nCS                   ),
 
   .boot_gba_en            ( gba_en                ),
-  .fast_boot_en           ( 0                     ),
+  .fast_boot_en           ( 1                     ),
 
   .cgb_boot_download      ( cgb_boot_download     ),
   .dmg_boot_download      ( dmg_boot_download     ),
