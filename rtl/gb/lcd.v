@@ -245,6 +245,22 @@ always @(posedge clk_vid) begin
 	end
 end
 
+wire [23:0] rgb_overlay;
+wire overlay_active;
+
+ui ui (
+	.clk(clk_vid),
+
+	.video_fetch_x(h_cnt - H_START),
+	.video_fetch_y(v_cnt - VSTART),
+
+	// Settings
+	.turbo_speed(0),
+
+	.active (overlay_active),
+	.vid_out(rgb_overlay)
+);
+
 // -------------------------------------------------------------------------------
 // ------------------------------- pixel generator -------------------------------
 // -------------------------------------------------------------------------------
@@ -323,11 +339,15 @@ reg [1:0] sc1, sc;
 reg [7:0] rt, gt, bt;
 reg shadow_end1, shadow_end2;
 wire shadow_en = shadow && ~isGBC ;
-assign r = shadow_end2 ? ((rt >> 1) + (rt >> 2) + (~sc[1] ? (rt >> 3) : 1'd0) + (~sc[0] ? (rt >> 4) : 1'd0)) : rt;
-assign g = shadow_end2 ? ((gt >> 1) + (gt >> 2) + (~sc[1] ? (gt >> 3) : 1'd0) + (~sc[0] ? (gt >> 4) : 1'd0)) : gt;
-assign b = shadow_end2 ? ((bt >> 1) + (bt >> 2) + (~sc[1] ? (bt >> 3) : 1'd0) + (~sc[0] ? (bt >> 4) : 1'd0)) : bt;
-always@(posedge clk_vid) begin
+wire [7:0] r_gb = shadow_end2 ? ((rt >> 1) + (rt >> 2) + (~sc[1] ? (rt >> 3) : 1'd0) + (~sc[0] ? (rt >> 4) : 1'd0)) : rt;
+wire [7:0] g_gb = shadow_end2 ? ((gt >> 1) + (gt >> 2) + (~sc[1] ? (gt >> 3) : 1'd0) + (~sc[0] ? (gt >> 4) : 1'd0)) : gt;
+wire [7:0] b_gb = shadow_end2 ? ((bt >> 1) + (bt >> 2) + (~sc[1] ? (bt >> 3) : 1'd0) + (~sc[0] ? (bt >> 4) : 1'd0)) : bt;
 
+assign r = overlay_active ? rgb_overlay[23:16] : r_gb;
+assign g = overlay_active ? rgb_overlay[15:8] : g_gb;
+assign b = overlay_active ? rgb_overlay[7:0] : b_gb;
+
+always@(posedge clk_vid) begin
 	if (ce_pix) begin
 		{r_cur, g_cur, b_cur} <= {r_tmp, g_tmp, b_tmp};
 		shadow_end1 <= shadow_en && (|shadow_buf[shptr]) && (pixel == 0);
