@@ -634,6 +634,41 @@ save_handler save_handler
   .loading_done         ( loading_done                    )
 );
 
+//////// Control ////////
+
+wire verifier_cart_rd;
+wire [15:0] verifier_cart_addr;
+
+wire verifying;
+wire verification_complete;
+wire verification_passed;
+
+cart_verifier cart_verifier (
+  .clk_6_7(clk_vid),
+
+  .verification_req(reset_n),
+
+  .cart_data(cart_tran_bank1),
+  .cart_rd(verifier_cart_rd),
+  .cart_addr(verifier_cart_addr),
+
+  .verifying(verifying),
+  .verification_complete(verification_complete),
+  .verification_passed(verification_passed)
+);
+
+wire [3:0] gb_cart_tran_bank0;
+wire [7:0] gb_cart_tran_bank2, gb_cart_tran_bank3;
+wire gb_cart_tran_bank1_dir;
+
+assign cart_tran_bank0 = verifying ? {2'b01, ~verifier_cart_rd, 1'b1} : gb_cart_tran_bank0;
+assign {cart_tran_bank2, cart_tran_bank3} = verifying ? verifier_cart_addr : {gb_cart_tran_bank2, gb_cart_tran_bank3};
+
+assign cart_tran_bank1_dir = ~verifying && gb_cart_tran_bank1_dir;
+
+wire display_cart_error = verification_complete && ~verification_passed;
+wire display_ui = display_cart_error;
+
 //////// Start GB/GBC Stuff ////////
 
 reg ioctl_download = 0;
@@ -834,11 +869,11 @@ cart_top cart
 
   .rumbling                   ( rumbling          ),
 
-  .cart_tran_bank0        ( cart_tran_bank0 ),
+  .cart_tran_bank0        ( gb_cart_tran_bank0 ),
   .cart_tran_bank1        ( cart_tran_bank1 ),
-  .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
-  .cart_tran_bank2        ( cart_tran_bank2 ),
-  .cart_tran_bank3        ( cart_tran_bank3 )
+  .cart_tran_bank1_dir    ( gb_cart_tran_bank1_dir ),
+  .cart_tran_bank2        ( gb_cart_tran_bank2 ),
+  .cart_tran_bank3        ( gb_cart_tran_bank3 )
 );
 
 reg [127:0] palette = 128'h828214517356305A5F1A3B4900000000;
@@ -858,7 +893,7 @@ wire lcd_vsync;
 
 wire DMA_on;
 
-wire reset = (~reset_n_s | (external_reset_s & loading_done) | cart_download | boot_download);
+wire reset = ~reset_n_s | (external_reset_s & loading_done) | cart_download | boot_download | verifying | (verification_complete && !verification_passed);
 wire speed;
 
 wire [15:0] GB_AUDIO_L;
@@ -1039,6 +1074,10 @@ lcd lcd
   .sgb_pal_en     ( sgb_pal_en              ),
   .sgb_en         ( sgb_border_en & sgb_en  ),
   .sgb_freeze     ( sgb_lcd_freeze          ),
+
+  .display_ui     ( display_ui              ),
+  .fullscreen_ui  ( display_cart_error      ),
+  .ui_string_index( 0                       ),
 
   .clk_vid        ( clk_ram                 ),
   .hs             ( video_hs_gb             ),

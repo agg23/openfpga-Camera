@@ -34,6 +34,10 @@ module lcd
 
 	input        on,
 
+	input display_ui,
+	input fullscreen_ui,
+	input [2:0] ui_string_index,
+
 	// VGA output
 	input            clk_vid, // 67.108864 MHz
 	output reg       ce_pix,
@@ -255,7 +259,7 @@ ui ui (
 	.video_fetch_y(v_cnt - VSTART),
 
 	// Settings
-	.turbo_speed(0),
+	.string_index(ui_string_index),
 
 	.active (overlay_active),
 	.vid_out(rgb_overlay)
@@ -343,9 +347,9 @@ wire [7:0] r_gb = shadow_end2 ? ((rt >> 1) + (rt >> 2) + (~sc[1] ? (rt >> 3) : 1
 wire [7:0] g_gb = shadow_end2 ? ((gt >> 1) + (gt >> 2) + (~sc[1] ? (gt >> 3) : 1'd0) + (~sc[0] ? (gt >> 4) : 1'd0)) : gt;
 wire [7:0] b_gb = shadow_end2 ? ((bt >> 1) + (bt >> 2) + (~sc[1] ? (bt >> 3) : 1'd0) + (~sc[0] ? (bt >> 4) : 1'd0)) : bt;
 
-assign r = overlay_active ? rgb_overlay[23:16] : r_gb;
-assign g = overlay_active ? rgb_overlay[15:8] : g_gb;
-assign b = overlay_active ? rgb_overlay[7:0] : b_gb;
+assign r = (fullscreen_ui | overlay_active) && display_ui ? rgb_overlay[23:16] : r_gb;
+assign g = (fullscreen_ui | overlay_active) && display_ui ? rgb_overlay[15:8] : g_gb;
+assign b = (fullscreen_ui | overlay_active) && display_ui ? rgb_overlay[7:0] : b_gb;
 
 always@(posedge clk_vid) begin
 	if (ce_pix) begin

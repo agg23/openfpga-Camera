@@ -7,7 +7,7 @@ module ui (
     input wire [9:0] video_fetch_y,
 
     // Settings
-    input wire [2:0] turbo_speed,
+    input wire [2:0] string_index,
 
     output wire active,
     output reg [23:0] vid_out
@@ -20,11 +20,7 @@ module ui (
   localparam DISPLAY_HEIGHT = 144;
   localparam TEXT_PADDING_Y = 10;
 
-  localparam UI_TEXT_WIDTH = (MAIN_TEXT_LENGTH + SPEED_TEXT_LENGTH) * UI_SCALE * 8;
   localparam TEXT_HEIGHT = UI_SCALE * 8 + 2 * TEXT_PADDING_Y;
-
-  localparam UI_START_X = (DISPLAY_WIDTH - UI_TEXT_WIDTH) / 2;
-  localparam UI_END_X = UI_START_X + UI_TEXT_WIDTH;
 
   localparam START_Y = (DISPLAY_HEIGHT - TEXT_HEIGHT) / 2;
 
@@ -32,64 +28,108 @@ module ui (
   localparam UI_END_Y = UI_START_Y + 8 * UI_SCALE;
   localparam END_Y = START_Y + TEXT_PADDING_Y * 2 + 8 * UI_SCALE;
 
-  // Comb
-  reg [7:0] character = 0;
+  // Strings
+  // Not detected
+  localparam NOT_DETECTED_TEXT_LENGTH = 19;
+  localparam NOT_DETECTED_TEXT_WIDTH = NOT_DETECTED_TEXT_LENGTH * UI_SCALE * 8;
 
-  localparam MAIN_TEXT_LENGTH = 13;
-  localparam SPEED_TEXT_LENGTH = 3;
-  reg [7:0] main_text[MAIN_TEXT_LENGTH] = '{
-      "T",
-      "u",
+  localparam NOT_DETECTED_START_X = (DISPLAY_WIDTH - NOT_DETECTED_TEXT_WIDTH) / 2;
+  localparam NOT_DETECTED_END_X = NOT_DETECTED_START_X + NOT_DETECTED_TEXT_WIDTH;
+
+  reg [7:0] not_detected_text[NOT_DETECTED_TEXT_LENGTH] = '{
+      "C",
+      "a",
+      "m",
+      "e",
       "r",
-      "b",
-      "o",
+      "a",
       " ",
-      "S",
-      "p",
-      "e",
-      "e",
+      "n",
+      "o",
+      "t",
+      " ",
       "d",
-      ":",
-      " "
+      "e",
+      "t",
+      "e",
+      "c",
+      "t",
+      "e",
+      "d"
   };
 
-  reg [7:0] speed_1x_text[3] = '{" ", "1", "x"};
-  reg [7:0] speed_2x_text[3] = '{" ", "2", "x"};
-  reg [7:0] speed_4x_text[3] = '{" ", "4", "x"};
-  reg [7:0] speed_50x_text[3] = '{"5", "0", "x"};
-  reg [7:0] speed_max_text[3] = '{"M", "a", "x"};
+  // SRAM exported
+  localparam SRAM_EXPORTED_TEXT_LENGTH = 13;
+  localparam SRAM_EXPORTED_TEXT_WIDTH = SRAM_EXPORTED_TEXT_LENGTH * UI_SCALE * 8;
+
+  localparam SRAM_EXPORTED_START_X = (DISPLAY_WIDTH - SRAM_EXPORTED_TEXT_WIDTH) / 2;
+  localparam SRAM_EXPORTED_END_X = SRAM_EXPORTED_START_X + SRAM_EXPORTED_TEXT_WIDTH;
+
+  reg [7:0] sram_exported_text[SRAM_EXPORTED_TEXT_LENGTH] = '{
+      "S",
+      "R",
+      "A",
+      "M",
+      " ",
+      "e",
+      "x",
+      "p",
+      "o",
+      "r",
+      "t",
+      "e",
+      "d"
+  };
+
+  // Comb
+  reg [7:0] character = 0;
 
   always_comb begin
     reg [9:0] local_addr;
     character = 0;
 
-    if (character_addr >= MAIN_TEXT_LENGTH) begin
-      // Speed values
-      local_addr = character_addr - MAIN_TEXT_LENGTH;
-      if (local_addr[4:0] < 3) begin
-        case (turbo_speed)
-          0: character = speed_1x_text[local_addr[1:0]];
-          1: character = speed_2x_text[local_addr[1:0]];
-          2: character = speed_4x_text[local_addr[1:0]];
-          3: character = speed_50x_text[local_addr[1:0]];
-          // 4 and above default to max
-          default: character = speed_max_text[local_addr[1:0]];
-        endcase
+    case (string_index)
+      0: begin
+        if (character_addr < NOT_DETECTED_TEXT_LENGTH) begin
+          character = not_detected_text[character_addr[4:0]];
+        end
       end
-    end else if (character_addr < MAIN_TEXT_LENGTH) begin
-      character = main_text[character_addr[3:0]];
-    end
+      1: begin
+        if (character_addr < SRAM_EXPORTED_TEXT_LENGTH) begin
+          character = sram_exported_text[character_addr[4:0]];
+        end
+      end
+    endcase
   end
 
-  wire x_active = video_fetch_x >= UI_START_X && video_fetch_x < UI_END_X;
+  wire [9:0] ui_start_x;
+  wire [9:0] ui_end_x;
+
+  always_comb begin
+    ui_start_x = 0;
+    ui_end_x = 1;
+
+    case (string_index)
+      0: begin
+        ui_start_x = NOT_DETECTED_START_X;
+        ui_end_x   = NOT_DETECTED_END_X;
+      end
+      0: begin
+        ui_start_x = SRAM_EXPORTED_START_X;
+        ui_end_x   = SRAM_EXPORTED_END_X;
+      end
+    endcase
+  end
+
+  wire x_active = video_fetch_x >= ui_start_x && video_fetch_x < ui_end_x;
   wire y_active = video_fetch_y >= UI_START_Y && video_fetch_y < UI_END_Y;
 
   assign active = video_fetch_y >= START_Y && video_fetch_y < END_Y;
 
-  wire [9:0] x_offset = video_fetch_x - UI_START_X;
+  wire [9:0] x_offset = video_fetch_x - ui_start_x;
   wire [9:0] y_offset = video_fetch_y - UI_START_Y;
 
-  wire [3:0] char_x_pixel = video_fetch_x >= UI_START_X ? x_offset[X_SCALE_BIT+1:0] : 0;
+  wire [3:0] char_x_pixel = video_fetch_x >= ui_start_x ? x_offset[X_SCALE_BIT+1:0] : 0;
   wire [3:0] char_y_pixel = video_fetch_y >= UI_START_Y ? y_offset[X_SCALE_BIT+1:0] : 0;
 
   wire [2:0] character_row = char_y_pixel[Y_SCALE_BIT+1:Y_SCALE_BIT-1];
