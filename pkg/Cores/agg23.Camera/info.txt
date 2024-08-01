@@ -1,1 +1,5 @@
-Port by budude2, original core created by mister community. As this is a work in progress please let me know of any issues.
+Game Boy Camera Access Tool
+
+Use your physical Game Boy Camera with custom ROMs stored on your Analogue Pocket's SD card.
+
+Created by agg23. Port to openFPGA by budude2, with original core created by MiSTer community.
