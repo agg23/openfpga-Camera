@@ -27,6 +27,15 @@
         "size_exact": 2304,
         "size_maximum": 2304,
         "address": "0x10000000"
+      },
+      {
+        "name": "SRAM Backup",
+        "id": 5,
+        "parameters": 0,
+        "extensions": [
+          "sav"
+        ],
+        "address": "0x20000000"
       }
     ]
   }

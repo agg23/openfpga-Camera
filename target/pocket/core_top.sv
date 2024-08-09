@@ -229,10 +229,10 @@ assign bridge_endian_little = 0;
 
 // cart is unused, so set all level translators accordingly
 // directions are 0:IN, 1:OUT
-assign cart_tran_bank3[7:2]    = 6'hzz;
-assign cart_tran_bank3[0]      = 1'hz;
-assign cart_tran_bank2         = 8'hzz;
-assign cart_tran_bank1         = 8'hzz;
+// assign cart_tran_bank3[7:2]    = 6'hzz;
+// assign cart_tran_bank3[0]      = 1'hz;
+// assign cart_tran_bank2         = 8'hzz;
+// assign cart_tran_bank1         = 8'hzz;
 
 assign cart_tran_bank0_dir     = 1'b1; // Output control flags
 assign cart_tran_bank2_dir     = 1'b1; // Output addresses
@@ -343,21 +343,18 @@ wire            osnotify_inmenu;
 // synchronous to clk_74a
 
 reg             target_dataslot_read;       
-reg             target_dataslot_write;
+wire            target_dataslot_write;
 reg             target_dataslot_getfile;    // require additional param/resp structs to be mapped
-reg             target_dataslot_openfile;   // require additional param/resp structs to be mapped
+wire            target_dataslot_openfile;   // require additional param/resp structs to be mapped
 
 wire            target_dataslot_ack;        
 wire            target_dataslot_done;
 wire    [2:0]   target_dataslot_err;
 
-reg     [15:0]  target_dataslot_id;
-reg     [31:0]  target_dataslot_slotoffset;
-reg     [31:0]  target_dataslot_bridgeaddr;
-reg     [31:0]  target_dataslot_length;
-
-wire    [31:0]  target_buffer_param_struct; // to be mapped/implemented when using some Target commands
-wire    [31:0]  target_buffer_resp_struct;  // to be mapped/implemented when using some Target commands
+wire    [15:0]  target_dataslot_id;
+wire    [31:0]  target_dataslot_slotoffset;
+wire    [31:0]  target_dataslot_bridgeaddr;
+wire    [31:0]  target_dataslot_length;
     
 // bridge data slot access
 // synchronous to clk_74a
@@ -439,8 +436,8 @@ core_bridge_cmd icb (
   .target_dataslot_bridgeaddr ( target_dataslot_bridgeaddr ),
   .target_dataslot_length     ( target_dataslot_length     ),
 
-  .target_buffer_param_struct ( target_buffer_param_struct ),
-  .target_buffer_resp_struct  ( target_buffer_resp_struct  ),
+  .target_buffer_param_struct ( target_dataslot_bridgeaddr ),
+  .target_buffer_resp_struct  ( target_dataslot_bridgeaddr ),
   
   .datatable_addr             ( datatable_addr             ),
   .datatable_wren             ( datatable_wren             ),
@@ -479,7 +476,8 @@ end
 // add your own devices here
 always_comb begin
   casex(bridge_addr)
-    32'h2xxxxxxx: begin bridge_rd_data = save_rd_data;         end
+    32'h2xxxxxxx: begin bridge_rd_data = dump_bridge_rd_data;  end
+    32'h3xxxxxxx: begin bridge_rd_data = dump_bridge_rd_data;  end
     32'hF8xxxxxx: begin bridge_rd_data = cmd_bridge_rd_data;   end
     32'hF1000000: begin bridge_rd_data = int_bridge_read_data; end
     32'hF2000000: begin bridge_rd_data = int_bridge_read_data; end
@@ -592,48 +590,6 @@ data_loader #(
   .write_data           ( ioctl_dout            )
 );
 
-logic bk_wr, bk_rtc_wr, loading_done;
-logic [16:0] bk_addr;
-logic [15:0] bk_data, bk_q;
-logic [31:0] save_rd_data, loaded_save_size;
-
-save_handler save_handler
-(
-  .clk_74a              ( clk_74a                         ),
-  .clk_sys              ( clk_sys                         ),
-  .reset                ( reset                           ),
-  .external_reset_s     ( external_reset_s & loading_done ),
-  .pll_core_locked      ( pll_core_locked                 ),
-
-  .bridge_rd            ( bridge_rd                       ),
-  .bridge_wr            ( bridge_wr                       ),
-  .bridge_endian_little ( bridge_endian_little            ),
-  .bridge_addr          ( bridge_addr                     ),
-  .bridge_wr_data       ( bridge_wr_data                  ),
-  .bridge_rd_data       ( save_rd_data                    ),
-
-  .datatable_addr       ( datatable_addr                  ),
-  .datatable_wren       ( datatable_wren                  ),
-  .datatable_data       ( datatable_data                  ),
-  .datatable_q          ( datatable_q                     ),
-
-  .bk_wr                ( bk_wr                           ),
-  .bk_rtc_wr            ( bk_rtc_wr                       ),
-  .bk_addr              ( bk_addr                         ),
-  .bk_data              ( bk_data                         ),
-  .bk_q                 ( bk_q                            ),
-
-  .cart_has_save        ( cart_has_save                   ),
-  .cart_download        ( cart_download                   ),
-  .ram_mask_file        ( ram_mask_file                   ),
-  .RTC_timestampOut     ( RTC_timestampOut                ),
-  .RTC_savedtimeOut     ( RTC_savedtimeOut                ),
-  .RTC_inuse            ( RTC_inuse                       ),
-  .RTC_valid            ( rtc_valid                       ),
-  .loaded_save_size     ( loaded_save_size                ),
-  .loading_done         ( loading_done                    )
-);
-
 //////// Control ////////
 
 wire verifier_cart_rd;
@@ -657,17 +613,138 @@ cart_verifier cart_verifier (
   .verification_passed(verification_passed)
 );
 
-wire [3:0] gb_cart_tran_bank0;
-wire [7:0] gb_cart_tran_bank2, gb_cart_tran_bank3;
+wire [3:0] gb_cart_tran_bank0_out;
+wire [7:0] gb_cart_tran_bank1_out;
+wire [7:0] gb_cart_tran_bank2_out;
+wire [7:0] gb_cart_tran_bank3_out;
 wire gb_cart_tran_bank1_dir;
 
-assign cart_tran_bank0 = verifying ? {2'b01, ~verifier_cart_rd, 1'b1} : gb_cart_tran_bank0;
-assign {cart_tran_bank2, cart_tran_bank3} = verifying ? verifier_cart_addr : {gb_cart_tran_bank2, gb_cart_tran_bank3};
+assign cart_tran_bank1_dir = dumping ? dump_cart_tran_bank1_dir : ~verifying && gb_cart_tran_bank1_dir;
 
-assign cart_tran_bank1_dir = ~verifying && gb_cart_tran_bank1_dir;
+// wire [7:0] gb_cart_tran_bank1_drive, dump_cart_tran_bank1_drive;
+
+// assign gb_cart_tran_bank1_drive = ~dumping ? gb_cart_tran_bank1 : 8'hZZ;
+// assign dump_cart_tran_bank1_drive = dumping ? dump_cart_tran_bank1 : 8'hZZ;
+
+always_comb begin
+  cart_tran_bank0 = 8'hZZ;
+  cart_tran_bank1 = 8'hZZ;
+  cart_tran_bank2 = 8'hZZ;
+  cart_tran_bank3 = 8'hZZ;
+
+  if (cart_tran_bank0_dir) begin
+    cart_tran_bank0 = dumping ? dump_cart_tran_bank0_out : verifying ? {2'b01, ~verifier_cart_rd, 1'b1} : gb_cart_tran_bank0_out;
+  end
+
+  if (cart_tran_bank1_dir) begin
+    cart_tran_bank1 = dumping ? dump_cart_tran_bank1_out : gb_cart_tran_bank1_out;
+  end
+
+  if (cart_tran_bank2_dir) begin
+    cart_tran_bank2 = dumping ? dump_cart_addr[15:8] : verifying ? verifier_cart_addr[15:8] : gb_cart_tran_bank2_out;
+  end
+
+  if (cart_tran_bank3_dir) begin
+    cart_tran_bank3 = dumping ? dump_cart_addr[7:0] : verifying ? verifier_cart_addr[7:0] : gb_cart_tran_bank3_out;
+  end
+end
 
 wire display_cart_error = verification_complete && ~verification_passed;
-wire display_ui = display_cart_error;
+wire display_ui = display_cart_error || dumping;
+
+//////// SRAM Dumping ////////
+
+wire dumping;
+wire dumping_s;
+
+synch_3 dumping_sync (dumping, dumping_s, clk_sys);
+
+wire [15:0] dump_cart_addr;
+wire [7:0] dump_cart_tran_bank0_out;
+wire [7:0] dump_cart_tran_bank1_out;
+wire dump_cart_tran_bank1_dir;
+
+wire [31:0] dump_bridge_rd_data;
+
+wire dump_rd;
+wire [15:0] dump_addr;
+wire [7:0] dump_data;
+wire [7:0] path_data;
+
+wire is_dump_address = bridge_addr[31:28] == 4'h2;
+wire is_path_address = bridge_addr[31:28] == 4'h3;
+
+data_unloader #(
+  .ADDRESS_SIZE         (16),
+  .READ_MEM_CLOCK_DELAY (34),
+  .INPUT_WORD_SIZE      (1)
+) dump_data_unloader (
+  .clk_74a              (clk_74a),
+  .clk_memory           (clk_74a),
+
+  .bridge_rd            (bridge_rd),
+  .bridge_endian_little (bridge_endian_little),
+  .bridge_addr          (bridge_addr),
+  .bridge_rd_data       (dump_bridge_rd_data),
+
+  .active_address       (is_dump_address || is_path_address),
+
+  .read_en              (dump_rd),
+  .read_addr            (dump_addr),
+  .read_data            (is_dump_address ? dump_data : path_data)
+);
+
+save_dumper save_dumper (
+  .clk_74a(clk_74a),
+
+  .bridge_rd(dump_rd && is_dump_address),
+  .bridge_8bit_addr({16'h0, dump_addr}),
+  .bridge_8bit_rd_data(dump_data),
+
+  .cart_address(dump_cart_addr),
+
+  .cart_tran_bank0_out(dump_cart_tran_bank0_out),
+
+  .cart_tran_bank1_in(cart_tran_bank1),
+  .cart_tran_bank1_out(dump_cart_tran_bank1_out),
+  .cart_tran_bank1_dir(dump_cart_tran_bank1_dir),
+);
+
+reg dump_sram = 0;
+
+file_controller file_controller (
+  .clk(clk_74a),
+
+  .dump_sram(dump_sram),
+  .dumping(dumping),
+
+  // .bridge_rd(dump_rd && is_path_address),
+  .bridge_8bit_addr({16'h0, dump_addr}),
+  .bridge_8bit_rd_data(path_data),
+
+  .target_dataslot_write(target_dataslot_write),
+  .target_dataslot_openfile(target_dataslot_openfile),
+  .target_dataslot_id(target_dataslot_id),
+  .target_dataslot_slotoffset(target_dataslot_slotoffset),
+  .target_dataslot_bridgeaddr(target_dataslot_bridgeaddr),
+  .target_dataslot_length(target_dataslot_length),
+
+  .target_dataslot_ack(target_dataslot_ack),
+  .target_dataslot_done(target_dataslot_done),
+  .target_dataslot_err(target_dataslot_err)
+);
+
+reg prev_left_trigger = 0;
+
+always @(posedge clk_74a) begin
+  prev_left_trigger <= cont1_key[8];
+
+  dump_sram <= 0;
+
+  if (~dumping && ~display_cart_error && ~prev_left_trigger && cont1_key[8]) begin
+    dump_sram <= 1;
+  end
+end
 
 //////// Start GB/GBC Stuff ////////
 
@@ -837,13 +914,6 @@ cart_top cart
   .ioctl_dout                 ( ioctl_dout        ),
   .ioctl_wait                 ( ioctl_wait        ),
 
-  .bk_wr                      ( bk_wr             ),
-  .bk_rtc_wr                  ( bk_rtc_wr         ),
-  .bk_addr                    ( bk_addr           ),
-  .bk_data                    ( bk_data           ),
-  .bk_q                       ( bk_q              ),
-  .img_size                   ( loaded_save_size  ),
-
   .rom_di                     ( rom_do            ),
 
   .joystick_analog_0          ( 0                 ),
@@ -869,11 +939,12 @@ cart_top cart
 
   .rumbling                   ( rumbling          ),
 
-  .cart_tran_bank0        ( gb_cart_tran_bank0 ),
-  .cart_tran_bank1        ( cart_tran_bank1 ),
-  .cart_tran_bank1_dir    ( gb_cart_tran_bank1_dir ),
-  .cart_tran_bank2        ( gb_cart_tran_bank2 ),
-  .cart_tran_bank3        ( gb_cart_tran_bank3 )
+  .cart_tran_bank0_out        ( gb_cart_tran_bank0_out    ),
+  .cart_tran_bank1_in         ( cart_tran_bank1           ),
+  .cart_tran_bank1_out        ( gb_cart_tran_bank1_out    ),
+  .cart_tran_bank1_dir        ( gb_cart_tran_bank1_dir    ),
+  .cart_tran_bank2_out        ( gb_cart_tran_bank2_out    ),
+  .cart_tran_bank3_out        ( gb_cart_tran_bank3_out    )
 );
 
 reg [127:0] palette = 128'h828214517356305A5F1A3B4900000000;
@@ -893,7 +964,7 @@ wire lcd_vsync;
 
 wire DMA_on;
 
-wire reset = ~reset_n_s | (external_reset_s & loading_done) | cart_download | boot_download | verifying | (verification_complete && !verification_passed);
+wire reset = ~reset_n_s | (external_reset_s) | cart_download | boot_download | verifying | (verification_complete && !verification_passed);
 wire speed;
 
 wire [15:0] GB_AUDIO_L;
@@ -917,7 +988,7 @@ end
 // the gameboy itself
 gb gb
 (
-  .reset                  ( reset | ~loading_done ),
+  .reset                  ( reset ),
   
   .clk_sys                ( clk_sys               ),
   .ce                     ( ce_cpu                ),   // the whole gameboy runs on 4mhnz
@@ -1077,7 +1148,7 @@ lcd lcd
 
   .display_ui     ( display_ui              ),
   .fullscreen_ui  ( display_cart_error      ),
-  .ui_string_index( 0                       ),
+  .ui_string_index( dumping ? 1 : 0         ),
 
   .clk_vid        ( clk_ram                 ),
   .hs             ( video_hs_gb             ),
@@ -1107,7 +1178,7 @@ wire [7:0] joystick_2 = {cont3_key_s[15], cont3_key_s[14], cont3_key_s[5], cont3
 wire [7:0] joystick_3 = {cont4_key_s[15], cont4_key_s[14], cont4_key_s[5], cont4_key_s[4], cont4_key_s[0], cont4_key_s[1], cont4_key_s[2], cont4_key_s[3]};
 
 sgb sgb (
-  .reset              ( reset | ~loading_done         ),
+  .reset              ( reset                         ),
   .clk_sys            ( clk_sys                       ),
   .ce                 ( ce_cpu                        ),
 
@@ -1248,7 +1319,7 @@ end
 speedcontrol speedcontrol
 (
   .clk_sys     ( clk_sys              ),
-  .pause       ( paused               ),
+  .pause       ( paused | dumping_s    ),
   .speedup     ( fast_forward         ),
   .cart_act    ( cart_act             ),
   .DMA_on      ( DMA_on               ),

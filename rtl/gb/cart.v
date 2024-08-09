@@ -41,13 +41,6 @@ module cart_top (
 	input  [15:0] ioctl_dout,
 	output        ioctl_wait,
 
-	input         bk_wr,
-	input         bk_rtc_wr,
-	input  [16:0] bk_addr,
-	input  [15:0] bk_data,
-	output [15:0] bk_q,
-	input  [63:0] img_size,
-
 	input  [7:0]  rom_di,
 
 	input  [15:0] joystick_analog_0,
@@ -72,11 +65,12 @@ module cart_top (
 	output  [7:0] Savestate_CRAMReadData,
 	output        rumbling,
 
-	inout   [7:4] cart_tran_bank0,
-	inout   [7:0] cart_tran_bank1,
+	output  [7:4] cart_tran_bank0_out,
+	input   [7:0] cart_tran_bank1_in,
+	output  [7:0] cart_tran_bank1_out,
   output        cart_tran_bank1_dir,
-	inout   [7:0] cart_tran_bank2,
-	inout   [7:0] cart_tran_bank3
+	output  [7:0] cart_tran_bank2_out,
+	output  [7:0] cart_tran_bank3_out
 );
 ///////////////////////////////////////////////////
 
@@ -143,12 +137,6 @@ mappers mappers (
 	.RTC_savedtimeOut  ( RTC_savedtimeOut ),
 	.RTC_inuse         ( RTC_inuse        ),
 
-	.bk_wr          ( bk_wr          ),
-	.bk_rtc_wr      ( bk_rtc_wr      ),
-	.bk_addr        ( bk_addr        ),
-	.bk_data        ( bk_data        ),
-	.img_size       ( img_size       ),
-
 	.savestate_load   ( savestate_load ),
 	.savestate_data   ( SS_Ext         ),
 	.savestate_back   ( SS_Ext_BACK    ),
@@ -179,11 +167,12 @@ mappers mappers (
 	.has_battery ( mbc_battery ),
 	.rumbling    ( cart_rumbling ),
 
-	.cart_tran_bank0        ( cart_tran_bank0 ),
-  .cart_tran_bank1        ( cart_tran_bank1 ),
+	.cart_tran_bank0_out    ( cart_tran_bank0_out ),
+	.cart_tran_bank1_in 		( cart_tran_bank1_in  ),
+	.cart_tran_bank1_out		( cart_tran_bank1_out ),
   .cart_tran_bank1_dir    ( cart_tran_bank1_dir ),
-  .cart_tran_bank2        ( cart_tran_bank2 ),
-  .cart_tran_bank3        ( cart_tran_bank3 )
+  .cart_tran_bank2_out    ( cart_tran_bank2_out ),
+  .cart_tran_bank3_out    ( cart_tran_bank3_out )
 );
 
 // extract header fields extracted from cartridge

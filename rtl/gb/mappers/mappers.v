@@ -37,12 +37,6 @@ module mappers (
     output [47:0] RTC_savedtimeOut,
     output        RTC_inuse,
 
-    input        bk_wr,
-    input        bk_rtc_wr,
-    input [16:0] bk_addr,
-    input [15:0] bk_data,
-    input [63:0] img_size,
-
     input         savestate_load,
     input  [15:0] savestate_data,
     output [15:0] savestate_back,
@@ -75,11 +69,12 @@ module mappers (
     output        has_battery,
     output        rumbling,
 
-    inout  [7:4] cart_tran_bank0,
-    inout  [7:0] cart_tran_bank1,
+    output [7:4] cart_tran_bank0_out,
+    input  [7:0] cart_tran_bank1_in,
+    output [7:0] cart_tran_bank1_out,
     output       cart_tran_bank1_dir,
-    inout  [7:0] cart_tran_bank2,
-    inout  [7:0] cart_tran_bank3
+    output [7:0] cart_tran_bank2_out,
+    output [7:0] cart_tran_bank3_out
 );
 
   tri0 has_battery_b;
@@ -131,11 +126,12 @@ module mappers (
       // .ram_enabled_b(ram_enabled_b),
       .has_battery_b(has_battery_b),
 
-      .cart_tran_bank0    (cart_tran_bank0),
-      .cart_tran_bank1    (cart_tran_bank1),
+      .cart_tran_bank0_out(cart_tran_bank0_out),
+      .cart_tran_bank1_in (cart_tran_bank1_in),
+      .cart_tran_bank1_out(cart_tran_bank1_out),
       .cart_tran_bank1_dir(cart_tran_bank1_dir),
-      .cart_tran_bank2    (cart_tran_bank2),
-      .cart_tran_bank3    (cart_tran_bank3)
+      .cart_tran_bank2_out(cart_tran_bank2_out),
+      .cart_tran_bank3_out(cart_tran_bank3_out)
   );
 
   // assign {cram_do} = {cram_do_b};

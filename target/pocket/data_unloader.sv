@@ -27,8 +27,6 @@
 // This consumes four / OUTPUT_WORD_SIZE words (4 separate bytes, or 2 16-bit words) and sends APF 32 bit words.
 // You can configure the cycle delay by setting READ_MEM_CLOCK_DELAY
 module data_unloader #(
-    // Upper 4 bits of address
-    parameter ADDRESS_MASK_UPPER_4 = 0,
     parameter ADDRESS_SIZE = 28,
 
     // Number of memory clock cycles it takes for a read to complete
@@ -44,6 +42,8 @@ module data_unloader #(
     input wire bridge_endian_little,
     input wire [31:0] bridge_addr,
     output reg [31:0] bridge_rd_data = 0,
+
+    input wire active_address,
 
     // These outputs are synced to the memory clock
     output reg read_en = 0,
@@ -130,7 +130,7 @@ module data_unloader #(
   always @(posedge clk_74a) begin
     prev_bridge_rd <= bridge_rd;
 
-    if (~prev_bridge_rd && bridge_rd && bridge_addr[31:28] == ADDRESS_MASK_UPPER_4) begin
+    if (~prev_bridge_rd && bridge_rd && active_address) begin
       // Beginning APF read from core
       addr_state <= ADDR_REQ;
       address_write_req <= 1;
