@@ -649,8 +649,9 @@ always_comb begin
   end
 end
 
+wire no_slots_error;
 wire display_cart_error = verification_complete && ~verification_passed;
-wire display_ui = display_cart_error || dumping;
+wire display_ui = display_cart_error || dumping || ui_timer > 0;
 
 //////// SRAM Dumping ////////
 
@@ -707,16 +708,22 @@ save_dumper save_dumper (
 
   .cart_tran_bank1_in(cart_tran_bank1),
   .cart_tran_bank1_out(dump_cart_tran_bank1_out),
-  .cart_tran_bank1_dir(dump_cart_tran_bank1_dir),
+  .cart_tran_bank1_dir(dump_cart_tran_bank1_dir)
 );
+
+wire [7:0] save_index_bcd;
 
 reg dump_sram = 0;
 
 file_controller file_controller (
   .clk(clk_74a),
+  .reset(~reset_n),
 
   .dump_sram(dump_sram),
   .dumping(dumping),
+
+  .save_index_bcd(save_index_bcd),
+  .no_slots_error(no_slots_error),
 
   // .bridge_rd(dump_rd && is_path_address),
   .bridge_8bit_addr({16'h0, dump_addr}),
@@ -743,6 +750,23 @@ always @(posedge clk_74a) begin
 
   if (~dumping && ~display_cart_error && ~prev_left_trigger && cont1_key[8]) begin
     dump_sram <= 1;
+  end
+end
+
+reg [27:0] ui_timer = 0;
+reg prev_dumping = 0;
+reg prev_no_slots_error = 0;
+
+always @(posedge clk_74a) begin
+  prev_dumping <= dumping;
+  prev_no_slots_error <= no_slots_error;
+
+  if (ui_timer > 0) begin
+    ui_timer <= ui_timer - 27'h1;
+  end
+
+  if ((~dumping && prev_dumping) || (no_slots_error && ~prev_no_slots_error)) begin
+    ui_timer <= 28'hFFF_FFFF;
   end
 end
 
@@ -1115,6 +1139,21 @@ wire ce_pix;
 wire [8:0] h_cnt, v_cnt;
 wire h_end;
 
+wire [2:0] ui_string_index = ui_timer > 0 ? 
+                                no_slots_error ? 3'h3 : 3'h2 :
+                                dumping ? 3'h1 : 3'h0;
+
+wire display_ui_s;
+wire display_cart_error_s;
+wire [2:0] ui_string_index_s;
+wire [7:0] save_index_bcd_s;
+
+synch_3 #(.WIDTH(13)) lcd_synch (
+  {display_ui, display_cart_error, ui_string_index, save_index_bcd},
+  {display_ui_s, display_cart_error_s, ui_string_index_s, save_index_bcd_s},
+  clk_sys
+);
+
 lcd lcd
 (
   // serial interface
@@ -1146,9 +1185,10 @@ lcd lcd
   .sgb_en         ( sgb_border_en & sgb_en  ),
   .sgb_freeze     ( sgb_lcd_freeze          ),
 
-  .display_ui     ( display_ui              ),
-  .fullscreen_ui  ( display_cart_error      ),
-  .ui_string_index( dumping ? 1 : 0         ),
+  .display_ui     ( display_ui_s            ),
+  .fullscreen_ui  ( display_cart_error_s    ),
+  .ui_string_index( ui_string_index_s       ),
+  .save_index_bcd ( save_index_bcd_s        ),
 
   .clk_vid        ( clk_ram                 ),
   .hs             ( video_hs_gb             ),
@@ -1241,6 +1281,9 @@ reg de_prev;
 
 wire de = ~(h_blank || v_blank);
 
+wire [7:0] lum;
+assign lum = (video_rgb_gb[23:16]>>2) + (video_rgb_gb[23:16]>>5) + (video_rgb_gb[15:8]>>1) + (video_rgb_gb[15:8]>>4) + (video_rgb_gb[7:0]>>4) + (video_rgb_gb[7:0]>>5);
+
 always_ff @(posedge clk_vid) begin
   video_hs_reg  <= 0;
   video_de_reg  <= 0;
@@ -1249,7 +1292,11 @@ always_ff @(posedge clk_vid) begin
   if (de) begin
     video_de_reg  <= 1;
 
-    video_rgb_reg <= video_rgb_gb;
+    if (bw_en) begin
+      video_rgb_reg <= {lum, lum, lum};
+    end else begin
+      video_rgb_reg <= video_rgb_gb;
+    end
   end else if (de_prev && ~de) begin
     video_rgb_reg <= 24'h0;
   end
@@ -1280,9 +1327,6 @@ assign video_de           = video_de_reg;
 assign video_hs           = video_hs_reg;
 assign video_vs           = video_vs_reg;
 
-wire [7:0] lum;
-assign lum = (video_rgb_reg[23:16]>>2) + (video_rgb_reg[23:16]>>5) + (video_rgb_reg[15:8]>>1) + (video_rgb_reg[15:8]>>4) + (video_rgb_reg[7:0]>>4) + (video_rgb_reg[7:0]>>5);
-
 always_comb begin
   if(~video_de_reg) begin
     if(sgb_border_en & sgb_en) begin
@@ -1295,11 +1339,7 @@ always_comb begin
       video_rgb[2:0]   = 0;
     end
   end else begin
-    if (bw_en) begin
-      video_rgb = {lum, lum, lum};
-    end else begin
-      video_rgb = video_rgb_reg;
-    end
+    video_rgb = video_rgb_reg;
   end
 end
 

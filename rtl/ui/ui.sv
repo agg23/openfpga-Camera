@@ -2,12 +2,14 @@
 // complete experiments of mine. I dislike all of this code, but it works for the purpose
 module ui (
     input wire clk,
+    input wire ce_pix,
 
     input wire [9:0] video_fetch_x,
     input wire [9:0] video_fetch_y,
 
     // Settings
     input wire [2:0] string_index,
+    input wire [7:0] save_index_bcd,
 
     output wire active,
     output reg [23:0] vid_out
@@ -58,14 +60,14 @@ module ui (
       "d"
   };
 
-  // SRAM exported
-  localparam SRAM_EXPORTED_TEXT_LENGTH = 13;
-  localparam SRAM_EXPORTED_TEXT_WIDTH = SRAM_EXPORTED_TEXT_LENGTH * UI_SCALE * 8;
+  // SRAM exporting
+  localparam SRAM_EXPORTING_TEXT_LENGTH = 14;
+  localparam SRAM_EXPORTING_TEXT_WIDTH = SRAM_EXPORTING_TEXT_LENGTH * UI_SCALE * 8;
 
-  localparam SRAM_EXPORTED_START_X = (DISPLAY_WIDTH - SRAM_EXPORTED_TEXT_WIDTH) / 2;
-  localparam SRAM_EXPORTED_END_X = SRAM_EXPORTED_START_X + SRAM_EXPORTED_TEXT_WIDTH;
+  localparam SRAM_EXPORTING_START_X = (DISPLAY_WIDTH - SRAM_EXPORTING_TEXT_WIDTH) / 2;
+  localparam SRAM_EXPORTING_END_X = SRAM_EXPORTING_START_X + SRAM_EXPORTING_TEXT_WIDTH;
 
-  reg [7:0] sram_exported_text[SRAM_EXPORTED_TEXT_LENGTH] = '{
+  reg [7:0] sram_exporting_text[SRAM_EXPORTING_TEXT_LENGTH] = '{
       "S",
       "R",
       "A",
@@ -77,46 +79,116 @@ module ui (
       "o",
       "r",
       "t",
+      "i",
+      "n",
+      "g"
+  };
+
+  // Saved to SRAM_
+  localparam SAVED_TO_TEXT_LENGTH = 12;
+  localparam SAVED_TO_NUMBER_TEXT_LENGTH = 2;
+  localparam SAVED_TO_SUFFIX_TEXT_LENGTH = 4;
+  localparam SAVED_TO_TEXT_WIDTH = (SAVED_TO_TEXT_LENGTH + SAVED_TO_NUMBER_TEXT_LENGTH + SAVED_TO_SUFFIX_TEXT_LENGTH) * UI_SCALE * 8;
+
+  localparam SAVED_TO_START_X = (DISPLAY_WIDTH - SAVED_TO_TEXT_WIDTH) / 2;
+  localparam SAVED_TO_END_X = SAVED_TO_START_X + SAVED_TO_TEXT_WIDTH;
+
+  reg [7:0] saved_to_text[SAVED_TO_TEXT_LENGTH] = '{
+      "S",
+      "a",
+      "v",
       "e",
-      "d"
+      "d",
+      ":",
+      " ",
+      "S",
+      "R",
+      "A",
+      "M",
+      "_"
+  };
+
+  reg [7:0] saved_to_suffix_text[SAVED_TO_SUFFIX_TEXT_LENGTH] = '{".", "s", "a", "v"};
+
+  // Fail: No free slots
+  localparam FAILED_EXPORT_TEXT_LENGTH = 19;
+  localparam FAILED_EXPORT_TEXT_WIDTH = FAILED_EXPORT_TEXT_LENGTH * UI_SCALE * 8;
+
+  localparam FAILED_EXPORT_START_X = (DISPLAY_WIDTH - FAILED_EXPORT_TEXT_WIDTH) / 2;
+  localparam FAILED_EXPORT_END_X = FAILED_EXPORT_START_X + FAILED_EXPORT_TEXT_WIDTH;
+
+  reg [7:0] failed_export_text[FAILED_EXPORT_TEXT_LENGTH] = '{
+      "F",
+      "a",
+      "i",
+      "l",
+      ":",
+      " ",
+      "N",
+      "o",
+      " ",
+      "f",
+      "r",
+      "e",
+      "e",
+      " ",
+      "s",
+      "l",
+      "o",
+      "t",
+      "s"
   };
 
   // Comb
   reg [7:0] character = 0;
 
+  reg [9:0] ui_start_x;
+  reg [9:0] ui_end_x;
+
   always_comb begin
     reg [9:0] local_addr;
-    character = 0;
-
-    case (string_index)
-      0: begin
-        if (character_addr < NOT_DETECTED_TEXT_LENGTH) begin
-          character = not_detected_text[character_addr[4:0]];
-        end
-      end
-      1: begin
-        if (character_addr < SRAM_EXPORTED_TEXT_LENGTH) begin
-          character = sram_exported_text[character_addr[4:0]];
-        end
-      end
-    endcase
-  end
-
-  wire [9:0] ui_start_x;
-  wire [9:0] ui_end_x;
-
-  always_comb begin
+    character  = 0;
     ui_start_x = 0;
-    ui_end_x = 1;
+    ui_end_x   = 1;
 
     case (string_index)
       0: begin
         ui_start_x = NOT_DETECTED_START_X;
         ui_end_x   = NOT_DETECTED_END_X;
+
+        if (character_addr < NOT_DETECTED_TEXT_LENGTH) begin
+          character = not_detected_text[character_addr[4:0]];
+        end
       end
-      0: begin
-        ui_start_x = SRAM_EXPORTED_START_X;
-        ui_end_x   = SRAM_EXPORTED_END_X;
+      1: begin
+        ui_start_x = SRAM_EXPORTING_START_X;
+        ui_end_x   = SRAM_EXPORTING_END_X;
+
+        if (character_addr < SRAM_EXPORTING_TEXT_LENGTH) begin
+          character = sram_exporting_text[character_addr[4:0]];
+        end
+      end
+      2: begin
+        ui_start_x = SAVED_TO_START_X;
+        ui_end_x   = SAVED_TO_END_X;
+
+        if (character_addr < SAVED_TO_TEXT_LENGTH) begin
+          character = saved_to_text[character_addr[4:0]];
+        end else if (character_addr == SAVED_TO_TEXT_LENGTH) begin
+          character = {4'h0, save_index_bcd[7:4]} + 8'h30;
+        end else if (character_addr == SAVED_TO_TEXT_LENGTH + 1) begin
+          character = {4'h0, save_index_bcd[3:0]} + 8'h30;
+        end else if (character_addr < SAVED_TO_TEXT_LENGTH + SAVED_TO_NUMBER_TEXT_LENGTH + SAVED_TO_SUFFIX_TEXT_LENGTH) begin
+          character = saved_to_suffix_text[character_addr[4:0] - (SAVED_TO_TEXT_LENGTH + SAVED_TO_NUMBER_TEXT_LENGTH + SAVED_TO_SUFFIX_TEXT_LENGTH)];
+        end
+      end
+      3: begin
+        ui_start_x = FAILED_EXPORT_START_X;
+        ui_end_x   = FAILED_EXPORT_END_X;
+
+        if (character_addr < FAILED_EXPORT_TEXT_LENGTH) begin
+          character = failed_export_text[character_addr[4:0]];
+        end
       end
     endcase
   end
@@ -138,8 +210,9 @@ module ui (
   // wire [9:0] character_addr = {4'b0, x_offset_prefetch[9:4]};
   wire [9:0] character_addr = {5'b0, x_offset_prefetch[8:3]};
 
-  assign vid_out = x_active && y_active && font_line[7-char_x_pixel[X_SCALE_BIT+1:X_SCALE_BIT-1]] ? 24'hFFFFFF : 0;
+  assign vid_out = x_active && y_active && font_line_reg[7-char_x_pixel[X_SCALE_BIT+1:X_SCALE_BIT-1]] ? 24'hFFFFFF : 0;
 
+  reg  [7:0] font_line_reg;
   wire [7:0] font_line;
 
   char_rom char_rom (
@@ -149,4 +222,10 @@ module ui (
       .row(character_row),
       .data_out(font_line)
   );
+
+  always @(posedge clk) begin
+    if (ce_pix) begin
+      font_line_reg <= font_line;
+    end
+  end
 endmodule

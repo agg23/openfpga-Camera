@@ -66,8 +66,6 @@ module save_dumper (
         state <= STATE_READ_DATA;
 
         read_req <= 1;
-
-        read_addr <= bridge_8bit_addr[15:0];
       end
       STATE_READ_DATA: begin
         if (read_ack) begin

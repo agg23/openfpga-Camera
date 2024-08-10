@@ -37,6 +37,7 @@ module lcd
 	input display_ui,
 	input fullscreen_ui,
 	input [2:0] ui_string_index,
+	input [7:0] save_index_bcd,
 
 	// VGA output
 	input            clk_vid, // 67.108864 MHz
@@ -254,12 +255,14 @@ wire overlay_active;
 
 ui ui (
 	.clk(clk_vid),
+	.ce_pix(ce_pix),
 
 	.video_fetch_x(h_cnt - H_START),
 	.video_fetch_y(v_cnt - VSTART),
 
 	// Settings
 	.string_index(ui_string_index),
+	.save_index_bcd(save_index_bcd),
 
 	.active (overlay_active),
 	.vid_out(rgb_overlay)

@@ -1,7 +1,8 @@
 module write_path (
     input wire clk,
 
-    input wire [6:0] save_index,
+    input  wire [6:0] save_index,
+    output wire [7:0] save_index_bcd,
 
     input  wire [7:0] address,
     output reg  [7:0] q
@@ -40,8 +41,6 @@ module write_path (
   };
 
   reg [7:0] path_suffix[PATH_SUFFIX_LENGTH] = '{".", "s", "a", "v"};
-
-  wire [7:0] save_index_bcd;
 
   double_bcd double_bcd (
       .binary(save_index),
