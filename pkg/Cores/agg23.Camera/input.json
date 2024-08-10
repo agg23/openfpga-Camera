@@ -24,6 +24,16 @@
             "id": 3,
             "name": "Select",
             "key": "pad_btn_select"
+          },
+          {
+            "id": 10,
+            "name": "Dump Button 1",
+            "key": "pad_trig_l"
+          },
+          {
+            "id": 11,
+            "name": "Dump Button 2",
+            "key": "pad_trig_r"
           }
         ]
       }

@@ -3,11 +3,11 @@
     "magic": "APF_VER_1",
     "variables": [
       {
-        "name": "Reset core",
+        "name": "Dump SRAM",
         "id": 10,
         "type": "action",
         "enabled": true,
-        "address": "0xF0000000",
+        "address": "0xF0000004",
         "value": 1
       }
     ],

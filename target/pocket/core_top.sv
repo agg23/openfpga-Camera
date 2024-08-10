@@ -489,12 +489,18 @@ reg [31:0] boot_settings = 32'h0;
 reg [31:0] run_settings  = 32'h0;
 logic [31:0] int_bridge_read_data;
 
+reg core_settings_dump = 0;
+
 always_ff @(posedge clk_74a) begin
   reset_timer <= 0; //! Always default this to zero
+  core_settings_dump <= 0;
 
   if(bridge_wr) begin
     case (bridge_addr)
       32'hF0000000: begin /*         RESET ONLY          */ reset_timer <= 1; end //! Reset Core Command
+      32'hF0000004: begin
+        core_settings_dump <= 1;
+      end
       32'hF1000000: begin boot_settings  <= bridge_wr_data; reset_timer <= 1; end //! System Settings
       32'hF2000000: begin run_settings   <= bridge_wr_data;                   end //! Runtime settings
     endcase
@@ -741,15 +747,27 @@ file_controller file_controller (
   .target_dataslot_err(target_dataslot_err)
 );
 
-reg prev_left_trigger = 0;
+wire both_triggers = cont1_key[8] && cont1_key[9];
+
+reg prev_both_triggers = 0;
+reg released_all_triggers_since_last_dump = 1;
 
 always @(posedge clk_74a) begin
-  prev_left_trigger <= cont1_key[8];
+  prev_both_triggers <= both_triggers;
 
   dump_sram <= 0;
 
-  if (~dumping && ~display_cart_error && ~prev_left_trigger && cont1_key[8]) begin
-    dump_sram <= 1;
+  if (~cont1_key[8] && ~cont1_key[9]) begin
+    // Triggers are not pressed
+    released_all_triggers_since_last_dump <= 1;
+  end
+
+  if (~dumping && ~display_cart_error) begin
+    // Only dump if both triggers are pressed, or Core Settings button is pressed
+    if ((released_all_triggers_since_last_dump && ~prev_both_triggers && both_triggers) || core_settings_dump) begin
+      dump_sram <= 1;
+      released_all_triggers_since_last_dump <= 0;
+    end
   end
 end
 
