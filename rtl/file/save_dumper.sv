@@ -1,5 +1,5 @@
 module save_dumper (
-    input wire clk_74a,
+    input wire clk_sys,
 
     input wire bridge_rd,
     input wire [31:0] bridge_8bit_addr,
@@ -48,7 +48,7 @@ module save_dumper (
 
   reg prev_bridge_rd = 0;
 
-  always @(posedge clk_74a) begin
+  always @(posedge clk_sys) begin
     prev_bridge_rd <= bridge_rd;
 
     read_req <= 0;

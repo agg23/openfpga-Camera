@@ -2,7 +2,6 @@ module cart_top (
 	input         reset,
 
 	input         clk_sys,
-	input					clk_cart,
 	input         ce_cpu,
 	input         ce_cpu2x,
 	input         speed,
@@ -102,7 +101,6 @@ wire mbc_battery;
 mappers mappers (
 	.reset ( reset ),
 	.clk_sys   ( clk_sys ),
-	.clk_cart  ( clk_cart ),
 	.ce_cpu    ( ce_cpu ),
 	.ce_cpu2x  ( ce_cpu2x ),
 	.speed ( speed ),

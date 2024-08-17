@@ -1,5 +1,5 @@
 module cart_verifier (
-    input wire clk_6_7,
+    input wire clk,
 
     input wire verification_req,
 
@@ -29,7 +29,7 @@ module cart_verifier (
       "A"
   };
 
-  reg [2:0] read_delay;
+  reg [7:0] read_delay;
   reg [3:0] address_offset;
 
   localparam STATE_NONE = 0;
@@ -42,7 +42,7 @@ module cart_verifier (
 
   assign verifying = state == STATE_READ || state == STATE_WAIT_READ;
 
-  always @(posedge clk_6_7) begin
+  always @(posedge clk) begin
     case (state)
       STATE_NONE: begin
         verification_complete <= 0;
@@ -60,10 +60,10 @@ module cart_verifier (
         cart_addr <= 16'h134 + {12'h0, address_offset};
         cart_rd <= 1;
 
-        read_delay <= 3'h7;
+        read_delay <= 8'h3F;
       end
       STATE_WAIT_READ: begin
-        read_delay <= read_delay - 3'h1;
+        read_delay <= read_delay - 8'h1;
 
         if (read_delay == 0) begin
           address_offset <= address_offset + 4'h1;

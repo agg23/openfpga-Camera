@@ -319,7 +319,7 @@ always @(posedge clk_sys) begin
 	if(reset_ss) old_cpu_wr_n <= SS_Top[54]; // 1'b0
 	else if (ce_cpu) old_cpu_wr_n <= cpu_wr_n;
 end
-wire cpu_wr_n_edge = ~(old_cpu_wr_n & ~cpu_wr_n);
+wire cpu_wr_n_edge = ~(old_cpu_wr_n & ~cpu_wr_n) /* synthesis keep */;
 
 wire cpu_stop;
 

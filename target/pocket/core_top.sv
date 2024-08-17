@@ -29,7 +29,7 @@ module core_top (
 
   // GBA A[23:16]
   inout   wire    [7:0]   cart_tran_bank1,
-  output  wire            cart_tran_bank1_dir,
+  output  reg             cart_tran_bank1_dir,
 
   // GBA [7] PHI#
   // GBA [6] WR#
@@ -238,9 +238,9 @@ assign cart_tran_bank0_dir     = 1'b1; // Output control flags
 assign cart_tran_bank2_dir     = 1'b1; // Output addresses
 assign cart_tran_bank3_dir     = 1'b1; // Output addresses
 
-assign cart_tran_pin30         = 1'b1; // Set ~reset high
-assign cart_tran_pin30_dir     = 1'b1;
-assign cart_pin30_pwroff_reset = 1'b1;  // Enable GBC cart access
+assign cart_tran_pin30         = 1'bZ; // Set ~reset high
+assign cart_tran_pin30_dir     = 1'bZ;
+assign cart_pin30_pwroff_reset = reset_n ? 1'b1 : 1'bZ;  // Enable GBC cart access
 
 assign cart_tran_pin31         = 1'bz;      // input
 assign cart_tran_pin31_dir     = 1'b0;  // input
@@ -344,17 +344,26 @@ wire            osnotify_inmenu;
 
 reg             target_dataslot_read;       
 wire            target_dataslot_write;
+wire            target_dataslot_write_s;
 reg             target_dataslot_getfile;    // require additional param/resp structs to be mapped
 wire            target_dataslot_openfile;   // require additional param/resp structs to be mapped
+wire            target_dataslot_openfile_s;
 
-wire            target_dataslot_ack;        
+wire            target_dataslot_ack;
+wire            target_dataslot_ack_s;        
 wire            target_dataslot_done;
+wire            target_dataslot_done_s;
 wire    [2:0]   target_dataslot_err;
+wire    [2:0]   target_dataslot_err_s;
 
 wire    [15:0]  target_dataslot_id;
+wire    [15:0]  target_dataslot_id_s;
 wire    [31:0]  target_dataslot_slotoffset;
+wire    [31:0]  target_dataslot_slotoffset_s;
 wire    [31:0]  target_dataslot_bridgeaddr;
+wire    [31:0]  target_dataslot_bridgeaddr_s;
 wire    [31:0]  target_dataslot_length;
+wire    [31:0]  target_dataslot_length_s;
     
 // bridge data slot access
 // synchronous to clk_74a
@@ -514,12 +523,13 @@ always_ff @(posedge clk_74a) begin
   end
 end
 
-logic clk_sys, clk_ram, clk_ram_90, clk_vid, clk_vid_90, clk_cart6x;
-logic pll_core_locked, pll_core_locked_s, reset_n_s, external_reset_s;
+logic clk_sys, clk_ram, clk_ram_90, clk_vid, clk_vid_90;
+logic pll_core_locked, pll_core_locked_s, reset_n_s, reset_n_s74, external_reset_s;
 logic [31:0] cont1_key_s, cont2_key_s, cont3_key_s, cont4_key_s;
 logic [31:0] boot_settings_s, run_settings_s;
 
 synch_3               s01 (pll_core_locked, pll_core_locked_s,  clk_ram);
+synch_3               s02_74 (reset_n,         reset_n_s74,        clk_74a);
 synch_3               s02 (reset_n,         reset_n_s,          clk_sys);
 synch_3               s03 (core_reset,      external_reset_s,   clk_sys);
 synch_3 #(.WIDTH(32)) s04 (cont1_key,       cont1_key_s,        clk_sys);
@@ -559,25 +569,6 @@ mf_pllbase mp1
   .locked   ( pll_core_locked )
 );
 
-cart_pll cart_pll (
-  .refclk   ( clk_74a         ),
-  .rst      ( 0               ),
-
-  .outclk_0 ( clk_cart6x        )
-);
-
-reg [2:0] clk_cart_divider = 0;
-
-wire clk_cart = clk_cart_divider < 3;
-
-always @(posedge clk_cart6x) begin
-  clk_cart_divider <= clk_cart_divider + 3'h1;
-
-  if (clk_cart_divider == 5) begin
-    clk_cart_divider <= 0;
-  end
-end
-
 data_loader #(
   .ADDRESS_MASK_UPPER_4   ( 4'h1  ),
   .OUTPUT_WORD_SIZE       ( 2     ),
@@ -605,12 +596,28 @@ wire verifying;
 wire verification_complete;
 wire verification_passed;
 
+reg prev_reset_n = 0;
+
+reg [22:0] verification_req_delay = 0;
+
+always @(posedge clk_sys) begin
+  prev_reset_n <= reset_n;
+
+  if (reset_n && ~prev_reset_n) begin
+    verification_req_delay <= 23'h7F_FFFF;
+  end
+
+  if (verification_req_delay > 0) begin
+    verification_req_delay <= verification_req_delay - 23'h1;
+  end
+end
+
 cart_verifier cart_verifier (
-  .clk_6_7(clk_vid),
+  .clk(clk_sys),
 
-  .verification_req(reset_n),
+  .verification_req(verification_req_delay == 23'h1),
 
-  .cart_data(cart_tran_bank1),
+  .cart_data(cart_tran_bank1_reg_in),
   .cart_rd(verifier_cart_rd),
   .cart_addr(verifier_cart_addr),
 
@@ -623,37 +630,42 @@ wire [3:0] gb_cart_tran_bank0_out;
 wire [7:0] gb_cart_tran_bank1_out;
 wire [7:0] gb_cart_tran_bank2_out;
 wire [7:0] gb_cart_tran_bank3_out;
-wire gb_cart_tran_bank1_dir;
 
-assign cart_tran_bank1_dir = dumping ? dump_cart_tran_bank1_dir : ~verifying && gb_cart_tran_bank1_dir;
+wire gb_cart_tran_bank1_dir;
 
 // wire [7:0] gb_cart_tran_bank1_drive, dump_cart_tran_bank1_drive;
 
 // assign gb_cart_tran_bank1_drive = ~dumping ? gb_cart_tran_bank1 : 8'hZZ;
 // assign dump_cart_tran_bank1_drive = dumping ? dump_cart_tran_bank1 : 8'hZZ;
 
-always_comb begin
-  cart_tran_bank0 = 8'hZZ;
-  cart_tran_bank1 = 8'hZZ;
-  cart_tran_bank2 = 8'hZZ;
-  cart_tran_bank3 = 8'hZZ;
+reg [7:4] cart_tran_bank0_reg_in;
+reg [7:0] cart_tran_bank1_reg_in;
+reg [7:0] cart_tran_bank2_reg_in;
+reg [7:0] cart_tran_bank3_reg_in;
 
-  if (cart_tran_bank0_dir) begin
-    cart_tran_bank0 = dumping ? dump_cart_tran_bank0_out : verifying ? {2'b01, ~verifier_cart_rd, 1'b1} : gb_cart_tran_bank0_out;
-  end
+reg [7:4] cart_tran_bank0_reg_out;
+reg [7:0] cart_tran_bank1_reg_out;
+reg [7:0] cart_tran_bank2_reg_out;
+reg [7:0] cart_tran_bank3_reg_out;
 
-  if (cart_tran_bank1_dir) begin
-    cart_tran_bank1 = dumping ? dump_cart_tran_bank1_out : gb_cart_tran_bank1_out;
-  end
+always @(posedge clk_ram) begin
+  cart_tran_bank0_reg_out <= dumping ? dump_cart_tran_bank0_out : verifying ? {2'b01, ~verifier_cart_rd, 1'b0} : gb_cart_tran_bank0_out;
+  cart_tran_bank1_reg_out <= dumping ? dump_cart_tran_bank1_out : gb_cart_tran_bank1_out;
+  cart_tran_bank2_reg_out <= dumping ? dump_cart_addr[15:8] : verifying ? verifier_cart_addr[15:8] : gb_cart_tran_bank2_out;
+  cart_tran_bank3_reg_out <= dumping ? dump_cart_addr[7:0] : verifying ? verifier_cart_addr[7:0] : gb_cart_tran_bank3_out;
 
-  if (cart_tran_bank2_dir) begin
-    cart_tran_bank2 = dumping ? dump_cart_addr[15:8] : verifying ? verifier_cart_addr[15:8] : gb_cart_tran_bank2_out;
-  end
+  cart_tran_bank0_reg_in <= cart_tran_bank0;
+  cart_tran_bank1_reg_in <= cart_tran_bank1;
+  cart_tran_bank2_reg_in <= cart_tran_bank2;
+  cart_tran_bank3_reg_in <= cart_tran_bank3;
 
-  if (cart_tran_bank3_dir) begin
-    cart_tran_bank3 = dumping ? dump_cart_addr[7:0] : verifying ? verifier_cart_addr[7:0] : gb_cart_tran_bank3_out;
-  end
+  cart_tran_bank1_dir <= dumping ? dump_cart_tran_bank1_dir : ~verifying && gb_cart_tran_bank1_dir;
 end
+
+assign cart_tran_bank0 = cart_tran_bank0_dir ? cart_tran_bank0_reg_out : 4'hZ;
+assign cart_tran_bank1 = cart_tran_bank1_dir ? cart_tran_bank1_reg_out : 8'hZZ;
+assign cart_tran_bank2 = cart_tran_bank2_dir ? cart_tran_bank2_reg_out : 8'hZZ;
+assign cart_tran_bank3 = cart_tran_bank3_dir ? cart_tran_bank3_reg_out : 8'hZZ;
 
 wire no_slots_error;
 wire display_cart_error = verification_complete && ~verification_passed;
@@ -662,9 +674,6 @@ wire display_ui = display_cart_error || dumping || ui_timer > 0;
 //////// SRAM Dumping ////////
 
 wire dumping;
-wire dumping_s;
-
-synch_3 dumping_sync (dumping, dumping_s, clk_sys);
 
 wire [15:0] dump_cart_addr;
 wire [7:0] dump_cart_tran_bank0_out;
@@ -687,7 +696,7 @@ data_unloader #(
   .INPUT_WORD_SIZE      (1)
 ) dump_data_unloader (
   .clk_74a              (clk_74a),
-  .clk_memory           (clk_74a),
+  .clk_memory           (clk_sys),
 
   .bridge_rd            (bridge_rd),
   .bridge_endian_little (bridge_endian_little),
@@ -702,7 +711,7 @@ data_unloader #(
 );
 
 save_dumper save_dumper (
-  .clk_74a(clk_74a),
+  .clk_sys(clk_sys),
 
   .bridge_rd(dump_rd && is_dump_address),
   .bridge_8bit_addr({16'h0, dump_addr}),
@@ -712,20 +721,25 @@ save_dumper save_dumper (
 
   .cart_tran_bank0_out(dump_cart_tran_bank0_out),
 
-  .cart_tran_bank1_in(cart_tran_bank1),
+  .cart_tran_bank1_in(cart_tran_bank1_reg_in),
   .cart_tran_bank1_out(dump_cart_tran_bank1_out),
   .cart_tran_bank1_dir(dump_cart_tran_bank1_dir)
 );
 
 wire [7:0] save_index_bcd;
 
-reg dump_sram = 0;
+reg [2:0] dump_sram_counter = 0;
+wire dump_sram = dump_sram_counter > 0;
+
+wire dump_sram_s;
+
+synch_3 file_controller_sync (dump_sram, dump_sram_s, clk_sys);
 
 file_controller file_controller (
-  .clk(clk_74a),
-  .reset(~reset_n),
+  .clk(clk_sys),
+  .reset(~reset_n_s),
 
-  .dump_sram(dump_sram),
+  .dump_sram(dump_sram_s),
   .dumping(dumping),
 
   .save_index_bcd(save_index_bcd),
@@ -735,16 +749,37 @@ file_controller file_controller (
   .bridge_8bit_addr({16'h0, dump_addr}),
   .bridge_8bit_rd_data(path_data),
 
-  .target_dataslot_write(target_dataslot_write),
-  .target_dataslot_openfile(target_dataslot_openfile),
-  .target_dataslot_id(target_dataslot_id),
-  .target_dataslot_slotoffset(target_dataslot_slotoffset),
-  .target_dataslot_bridgeaddr(target_dataslot_bridgeaddr),
-  .target_dataslot_length(target_dataslot_length),
+  .target_dataslot_write(target_dataslot_write_s),
+  .target_dataslot_openfile(target_dataslot_openfile_s),
+  .target_dataslot_id(target_dataslot_id_s),
+  .target_dataslot_slotoffset(target_dataslot_slotoffset_s),
+  .target_dataslot_bridgeaddr(target_dataslot_bridgeaddr_s),
+  .target_dataslot_length(target_dataslot_length_s),
 
-  .target_dataslot_ack(target_dataslot_ack),
-  .target_dataslot_done(target_dataslot_done),
-  .target_dataslot_err(target_dataslot_err)
+  .target_dataslot_ack(target_dataslot_ack_s),
+  .target_dataslot_done(target_dataslot_done_s),
+  .target_dataslot_err(target_dataslot_err_s)
+);
+
+synch_3 #(.WIDTH(114)) file_bridge_out_sync (
+  {target_dataslot_write_s, target_dataslot_openfile_s, target_dataslot_id_s, target_dataslot_slotoffset_s, target_dataslot_bridgeaddr_s, target_dataslot_length_s},
+  {target_dataslot_write, target_dataslot_openfile, target_dataslot_id, target_dataslot_slotoffset, target_dataslot_bridgeaddr, target_dataslot_length},
+  clk_74a
+);
+
+synch_3 #(.WIDTH(5)) file_bridge_in_sync (
+  {target_dataslot_ack, target_dataslot_done, target_dataslot_err},
+  {target_dataslot_ack_s, target_dataslot_done_s, target_dataslot_err_s},
+  clk_sys
+);
+
+wire dumping_s;
+wire display_cart_error_s;
+
+synch_3 #(.WIDTH(2)) control_sync (
+  {display_cart_error, dumping},
+  {display_cart_error_s, dumping_s},
+  clk_74a
 );
 
 wire both_triggers = cont1_key[8] && cont1_key[9];
@@ -755,17 +790,19 @@ reg released_all_triggers_since_last_dump = 1;
 always @(posedge clk_74a) begin
   prev_both_triggers <= both_triggers;
 
-  dump_sram <= 0;
+  if (dump_sram_counter > 0) begin
+    dump_sram_counter <= dump_sram_counter - 3'h1;
+  end
 
   if (~cont1_key[8] && ~cont1_key[9]) begin
     // Triggers are not pressed
     released_all_triggers_since_last_dump <= 1;
   end
 
-  if (~dumping && ~display_cart_error) begin
+  if (~dumping_s && ~display_cart_error_s) begin
     // Only dump if both triggers are pressed, or Core Settings button is pressed
     if ((released_all_triggers_since_last_dump && ~prev_both_triggers && both_triggers) || core_settings_dump) begin
-      dump_sram <= 1;
+      dump_sram_counter <= 3'h7;
       released_all_triggers_since_last_dump <= 0;
     end
   end
@@ -775,7 +812,7 @@ reg [27:0] ui_timer = 0;
 reg prev_dumping = 0;
 reg prev_no_slots_error = 0;
 
-always @(posedge clk_74a) begin
+always @(posedge clk_sys) begin
   prev_dumping <= dumping;
   prev_no_slots_error <= no_slots_error;
 
@@ -917,7 +954,6 @@ cart_top cart
   .reset                      ( reset             ),
 
   .clk_sys                    ( clk_sys           ),
-  .clk_cart                   ( clk_cart          ),
   .ce_cpu                     ( ce_cpu            ),
   .ce_cpu2x                   ( ce_cpu2x          ),
   .speed                      ( speed             ),
@@ -982,7 +1018,7 @@ cart_top cart
   .rumbling                   ( rumbling          ),
 
   .cart_tran_bank0_out        ( gb_cart_tran_bank0_out    ),
-  .cart_tran_bank1_in         ( cart_tran_bank1           ),
+  .cart_tran_bank1_in         ( cart_tran_bank1_reg_in    ),
   .cart_tran_bank1_out        ( gb_cart_tran_bank1_out    ),
   .cart_tran_bank1_dir        ( gb_cart_tran_bank1_dir    ),
   .cart_tran_bank2_out        ( gb_cart_tran_bank2_out    ),
@@ -1006,7 +1042,7 @@ wire lcd_vsync;
 
 wire DMA_on;
 
-wire reset = ~reset_n_s | (external_reset_s) | cart_download | boot_download | verifying | (verification_complete && !verification_passed);
+wire reset = ~reset_n_s | (external_reset_s) | cart_download | boot_download | verification_req_delay > 0 | verifying | (verification_complete && !verification_passed);
 wire speed;
 
 wire [15:0] GB_AUDIO_L;
@@ -1161,17 +1197,6 @@ wire [2:0] ui_string_index = ui_timer > 0 ?
                                 no_slots_error ? 3'h3 : 3'h2 :
                                 dumping ? 3'h1 : 3'h0;
 
-wire display_ui_s;
-wire display_cart_error_s;
-wire [2:0] ui_string_index_s;
-wire [7:0] save_index_bcd_s;
-
-synch_3 #(.WIDTH(13)) lcd_synch (
-  {display_ui, display_cart_error, ui_string_index, save_index_bcd},
-  {display_ui_s, display_cart_error_s, ui_string_index_s, save_index_bcd_s},
-  clk_sys
-);
-
 lcd lcd
 (
   // serial interface
@@ -1203,10 +1228,10 @@ lcd lcd
   .sgb_en         ( sgb_border_en & sgb_en  ),
   .sgb_freeze     ( sgb_lcd_freeze          ),
 
-  .display_ui     ( display_ui_s            ),
-  .fullscreen_ui  ( display_cart_error_s    ),
-  .ui_string_index( ui_string_index_s       ),
-  .save_index_bcd ( save_index_bcd_s        ),
+  .display_ui     ( display_ui              ),
+  .fullscreen_ui  ( display_cart_error      ),
+  .ui_string_index( ui_string_index         ),
+  .save_index_bcd ( save_index_bcd          ),
 
   .clk_vid        ( clk_ram                 ),
   .hs             ( video_hs_gb             ),
@@ -1377,7 +1402,7 @@ end
 speedcontrol speedcontrol
 (
   .clk_sys     ( clk_sys              ),
-  .pause       ( paused | dumping_s    ),
+  .pause       ( paused | dumping     ),
   .speedup     ( fast_forward         ),
   .cart_act    ( cart_act             ),
   .DMA_on      ( DMA_on               ),

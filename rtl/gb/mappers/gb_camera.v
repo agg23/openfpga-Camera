@@ -3,7 +3,6 @@ module gb_camera (
     input reset,
 
     input clk_sys,
-    input clk_cart,
     input ce_cpu,
 
     input        savestate_load,
@@ -72,6 +71,9 @@ module gb_camera (
   reg ram_write_en;
   // reg cam_en;
 
+  reg [1:0] clk_divider = 0;
+  reg clk_cart = 0;
+
   always @(posedge clk_sys) begin
     if (~enable) begin
       rom_bank_reg <= 6'd1;
@@ -79,6 +81,10 @@ module gb_camera (
       cam_en       <= 1'b0;
       ram_write_en <= 1'b0;
     end else if (ce_cpu) begin
+      clk_divider <= clk_divider + 2'h1;
+
+      clk_cart <= clk_divider < 2'h2;
+
       if (cart_wr & ~cart_a15) begin
         case (cart_addr[14:13])
           2'b01: rom_bank_reg <= cart_di[5:0];  //write to ROM bank register

@@ -9,8 +9,8 @@
       "description": "Game Boy Camera with local ROMs",
       "author": "agg23",
       "url": "https://github.com/agg23/openfpga-Camera",
-      "version": "1.0.0-beta",
-      "date_release": "2024-08-01"
+      "version": "1.0.0-rc",
+      "date_release": "2024-08-10"
     },
     "framework": {
       "target_product": "Analogue Pocket",
