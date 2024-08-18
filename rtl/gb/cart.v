@@ -96,7 +96,7 @@ eReg_SavestateV #(0, 37, 63, 0, 64'h0000000000000000) iREG_SAVESTATE_Ext2 (clk_s
 assign SaveStateExt_Dout = SaveStateBus_Dout_or[0] | SaveStateBus_Dout_or[1];
 
 wire [7:0] cram_do;
-wire mbc_battery;
+wire mbc_battery = 1;
 
 mappers mappers (
 	.reset ( reset ),
@@ -161,8 +161,6 @@ mappers mappers (
 	.cram_do   ( cram_do  ),
 
 	.mbc_addr    ( mbc_addr ),
-	// .ram_enabled ( mbc_ram_enable ),
-	.has_battery ( mbc_battery ),
 	.rumbling    ( cart_rumbling ),
 
 	.cart_tran_bank0_out    ( cart_tran_bank0_out ),

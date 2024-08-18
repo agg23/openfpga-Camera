@@ -226,6 +226,11 @@ set_instance_assignment -name FAST_INPUT_REGISTER ON -to cart_tran_bank3[5]
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to cart_tran_bank3[6]
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to cart_tran_bank3[7]
 
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to cart_tran_bank0_dir
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to cart_tran_bank1_dir
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to cart_tran_bank2_dir
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to cart_tran_bank3_dir
+
 # ==============================================================================
 # GBA CS2#/RES#
 # ==============================================================================

@@ -713,9 +713,13 @@ data_unloader #(
 save_dumper save_dumper (
   .clk_sys(clk_sys),
 
+  .reset(~dumping && prev_dumping),
+
   .bridge_rd(dump_rd && is_dump_address),
   .bridge_8bit_addr({16'h0, dump_addr}),
   .bridge_8bit_rd_data(dump_data),
+
+  .disable_camera(dumping),
 
   .cart_address(dump_cart_addr),
 

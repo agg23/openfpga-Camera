@@ -65,7 +65,6 @@ module mappers (
 
     output [22:0] mbc_addr,
     // output        ram_enabled,
-    output        has_battery,
     output        rumbling,
 
     output [7:4] cart_tran_bank0_out,
@@ -76,26 +75,19 @@ module mappers (
     output [7:0] cart_tran_bank3_out
 );
 
-  tri0 has_battery_b;
   tri0 [15:0] savestate_back_b;
   tri0 [63:0] savestate_back2_b;
   tri0 [31:0] RTC_timestampOut_b;
   tri0 [47:0] RTC_savedtimeOut_b;
   tri0 RTC_inuse_b;
 
-
   wire ce = speed ? ce_cpu2x : ce_cpu;
-  wire no_mapper = ~gb_camera;
-  wire no_mapper_single_bank = no_mapper & ~rom_mask[1];
-  wire no_mapper_multi_bank = no_mapper & rom_mask[1];  // size > 32KB
-  wire rom_override = (rocket);
-  wire cart_oe_override = (mbc3 | mbc7 | huc1 | huc3 | gb_camera | tama);
 
   gb_camera map_gb_camera (
       .enable(gb_camera),
 
-      .clk_sys (clk_sys),
-      .ce_cpu  (ce),
+      .clk_sys(clk_sys),
+      .ce_cpu (ce),
 
       .savestate_load  (savestate_load),
       .savestate_data  (savestate_data),
@@ -120,9 +112,7 @@ module mappers (
       // .cram_di    (cram_di),
       .cram_do(cram_do),
 
-      .mbc_addr   (mbc_addr),
-      // .ram_enabled_b(ram_enabled_b),
-      .has_battery_b(has_battery_b),
+      .mbc_addr(mbc_addr),
 
       .cart_tran_bank0_out(cart_tran_bank0_out),
       .cart_tran_bank1_in (cart_tran_bank1_in),
@@ -132,16 +122,9 @@ module mappers (
       .cart_tran_bank3_out(cart_tran_bank3_out)
   );
 
-  // assign {cram_do} = {cram_do_b};
   assign {savestate_back, savestate_back2} = {savestate_back_b, savestate_back2_b};
   assign {RTC_timestampOut, RTC_savedtimeOut, RTC_inuse} = {
     RTC_timestampOut_b, RTC_savedtimeOut_b, RTC_inuse_b
   };
-  // assign {cram_wr_do, cram_wr} = {cram_wr_do_b, cram_wr_b};
-
-  // assign mbc_addr = no_mapper_single_bank ? {8'd0, cart_addr[14:0]} : mbc_addr_b;
-  // assign cram_addr = no_mapper_single_bank ? {4'd0, cart_addr[12:0]} : cram_addr_b;
-  assign has_battery = no_mapper_single_bank ? (cart_mbc_type == 8'h09) : has_battery_b;
-  // assign ram_enabled = no_mapper_single_bank ? has_ram : ram_enabled_b;
 
 endmodule
