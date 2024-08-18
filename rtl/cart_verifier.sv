@@ -12,22 +12,33 @@ module cart_verifier (
     output reg  verification_passed
 );
 
-  localparam CAMERA_TEXT_LENGTH = 13;
+  // localparam CAMERA_TEXT_LENGTH = 13;
+  // reg [7:0] camera_text[CAMERA_TEXT_LENGTH] = '{
+  //     "G",
+  //     "A",
+  //     "M",
+  //     "E",
+  //     "B",
+  //     "O",
+  //     "Y",
+  //     "C",
+  //     "A",
+  //     "M",
+  //     "E",
+  //     "R",
+  //     "A"
+  // };
+
+  // localparam CAMERA_TEXT_ADDRESS = 16'h134;
+
+  localparam CAMERA_TEXT_LENGTH = 1;
   reg [7:0] camera_text[CAMERA_TEXT_LENGTH] = '{
-      "G",
-      "A",
-      "M",
-      "E",
-      "B",
-      "O",
-      "Y",
-      "C",
-      "A",
-      "M",
-      "E",
-      "R",
-      "A"
+      // Pocket Camera
+      8'hFC
   };
+
+  localparam CAMERA_TEXT_ADDRESS = 16'h147;
+
 
   reg [7:0] read_delay;
   reg [3:0] address_offset;
@@ -57,7 +68,7 @@ module cart_verifier (
       STATE_READ: begin
         state <= STATE_WAIT_READ;
 
-        cart_addr <= 16'h134 + {12'h0, address_offset};
+        cart_addr <= CAMERA_TEXT_ADDRESS + {12'h0, address_offset};
         cart_rd <= 1;
 
         read_delay <= 8'h3F;
