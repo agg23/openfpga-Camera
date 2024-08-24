@@ -240,7 +240,7 @@ assign cart_tran_bank3_dir     = 1'b1; // Output addresses
 
 assign cart_tran_pin30         = 1'bZ; // Set ~reset high
 assign cart_tran_pin30_dir     = 1'bZ;
-assign cart_pin30_pwroff_reset = reset_n ? 1'b1 : 1'bZ;  // Enable GBC cart access
+assign cart_pin30_pwroff_reset = reset_n_s ? 1'b1 : 1'bZ;  // Enable GBC cart access
 
 assign cart_tran_pin31         = 1'bz;      // input
 assign cart_tran_pin31_dir     = 1'b0;  // input
@@ -601,9 +601,9 @@ reg prev_reset_n = 0;
 reg [22:0] verification_req_delay = 0;
 
 always @(posedge clk_sys) begin
-  prev_reset_n <= reset_n;
+  prev_reset_n <= reset_n_s;
 
-  if (reset_n && ~prev_reset_n) begin
+  if (reset_n_s && ~prev_reset_n) begin
     verification_req_delay <= 23'h7F_FFFF;
   end
 
@@ -638,6 +638,13 @@ wire gb_cart_tran_bank1_dir;
 // assign gb_cart_tran_bank1_drive = ~dumping ? gb_cart_tran_bank1 : 8'hZZ;
 // assign dump_cart_tran_bank1_drive = dumping ? dump_cart_tran_bank1 : 8'hZZ;
 
+wire [3:0] cart_control = dumping ? dump_cart_tran_bank0_out : verifying ? {2'b01, ~verifier_cart_rd, 1'b0} : gb_cart_tran_bank0_out;
+
+reg cart_wr_n_delay = 1;
+reg cart_wr_n = 1;
+
+reg gb_cart_tran_bank1_dir_delay = 0;
+
 reg [7:4] cart_tran_bank0_reg_in;
 reg [7:0] cart_tran_bank1_reg_in;
 reg [7:0] cart_tran_bank2_reg_in;
@@ -648,8 +655,16 @@ reg [7:0] cart_tran_bank1_reg_out;
 reg [7:0] cart_tran_bank2_reg_out;
 reg [7:0] cart_tran_bank3_reg_out;
 
+always @(posedge clk_sys) begin
+  cart_wr_n_delay <= cart_control[2];
+  cart_wr_n <= cart_wr_n_delay;
+
+  gb_cart_tran_bank1_dir_delay <= gb_cart_tran_bank1_dir;
+end
+
 always @(posedge clk_ram) begin
-  cart_tran_bank0_reg_out <= dumping ? dump_cart_tran_bank0_out : verifying ? {2'b01, ~verifier_cart_rd, 1'b0} : gb_cart_tran_bank0_out;
+  // If main wr_n control signal is high, always be high, otherwise, go low after a delay
+  cart_tran_bank0_reg_out <= {cart_control[3], cart_control[2] | cart_wr_n, cart_control[1], cart_control[0]};
   cart_tran_bank1_reg_out <= dumping ? dump_cart_tran_bank1_out : gb_cart_tran_bank1_out;
   cart_tran_bank2_reg_out <= dumping ? dump_cart_addr[15:8] : verifying ? verifier_cart_addr[15:8] : gb_cart_tran_bank2_out;
   cart_tran_bank3_reg_out <= dumping ? dump_cart_addr[7:0] : verifying ? verifier_cart_addr[7:0] : gb_cart_tran_bank3_out;
@@ -659,7 +674,8 @@ always @(posedge clk_ram) begin
   cart_tran_bank2_reg_in <= cart_tran_bank2;
   cart_tran_bank3_reg_in <= cart_tran_bank3;
 
-  cart_tran_bank1_dir <= dumping ? dump_cart_tran_bank1_dir : ~verifying && gb_cart_tran_bank1_dir;
+  // Keep bank from swapping directions until a tick after the control signal actually changes
+  cart_tran_bank1_dir <= dumping ? dump_cart_tran_bank1_dir : ~verifying && (gb_cart_tran_bank1_dir || gb_cart_tran_bank1_dir_delay);
 end
 
 assign cart_tran_bank0 = cart_tran_bank0_dir ? cart_tran_bank0_reg_out : 4'hZ;
@@ -749,7 +765,6 @@ file_controller file_controller (
   .save_index_bcd(save_index_bcd),
   .no_slots_error(no_slots_error),
 
-  // .bridge_rd(dump_rd && is_path_address),
   .bridge_8bit_addr({16'h0, dump_addr}),
   .bridge_8bit_rd_data(path_data),
 
